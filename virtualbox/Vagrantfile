@@ -3,23 +3,35 @@ API_VERSION = "2"
 require "yaml"
 
 config_file = ENV["CONFIG_FILE"] || "config/default.yaml"
-var = YAML.load_file config_file
+config = YAML.load_file config_file
+machines = config["machines"]
 
 Vagrant.configure(API_VERSION) do |config|
-  config.vm.provider :virtualbox do |virtualbox|
-    virtualbox.name = var["name"]
-    virtualbox.cpus = var["cpu"]
-    virtualbox.memory = var["memory"]
+  machines.each do |machine|
+    config.vm.define machine["name"] do |name|
+      
+      name.vm.provider :virtualbox do |virtualbox|
+        virtualbox.name = machine["name"]
+        virtualbox.cpus = machine["cpu"]
+        virtualbox.memory = machine["memory"]
+        virtualbox.linked_clone = machine["linked_clone"]
+      end
+    
+      name.vm.box = machine["box"]
+      name.vm.hostname = machine["name"]
+      name.vm.network :private_network, ip: machine["private_ip"]
+      
+      name.vm.provision "shell", path: machine["shell_script_path"]
+ 
+      name.vm.provision "ansible" do |ansible|
+        ansible.compatibility_mode = "2.0"
+        ansible.playbook = machine["ansible_playbook_path"]
+      end
+    
+    end
   end
-
-  config.vm.box = var["box"]
-  config.vm.hostname = var["name"]
-  config.vm.network :private_network, ip: var["private_ip"]
+  
   config.vm.synced_folder ".", "/vagrant", disabled: true
-
-  # http://stackoverflow.com/a/17864388/100134
-  config.vm.define var["name"] do |t|
-  end
 
   config.ssh.insert_key = false
   config.ssh.forward_agent = true
@@ -27,16 +39,11 @@ Vagrant.configure(API_VERSION) do |config|
     "~/.ssh/id_rsa", 
     "~/.vagrant.d/insecure_private_key"
   ]
-
+  
   config.vm.provision :file do |file|
     file.source = "~/.ssh/id_rsa.pub"
     file.destination = "~/.ssh/authorized_keys"
   end
 
-  config.vm.provision "shell", path: var["shell_script_path"] 
- 
-  config.vm.provision "ansible" do |ansible|
-    ansible.compatibility_mode = "2.0"
-    ansible.playbook = var["ansible_playbook_path"]
-  end
 end
+
