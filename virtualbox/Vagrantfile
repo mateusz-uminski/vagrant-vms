@@ -1,0 +1,42 @@
+API_VERSION = "2"
+
+require "yaml"
+
+config_file = ENV["CONFIG_FILE"] || "config/default.yaml"
+var = YAML.load_file config_file
+
+Vagrant.configure(API_VERSION) do |config|
+  config.vm.provider :virtualbox do |virtualbox|
+    virtualbox.name = var["name"]
+    virtualbox.cpus = var["cpu"]
+    virtualbox.memory = var["memory"]
+  end
+
+  config.vm.box = var["box"]
+  config.vm.hostname = var["name"]
+  config.vm.network :private_network, ip: var["private_ip"]
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+
+  # http://stackoverflow.com/a/17864388/100134
+  config.vm.define var["name"] do |t|
+  end
+
+  config.ssh.insert_key = false
+  config.ssh.forward_agent = true
+  config.ssh.private_key_path = [
+    "~/.ssh/id_rsa", 
+    "~/.vagrant.d/insecure_private_key"
+  ]
+
+  config.vm.provision :file do |file|
+    file.source = "~/.ssh/id_rsa.pub"
+    file.destination = "~/.ssh/authorized_keys"
+  end
+
+  config.vm.provision "shell", path: var["shell_script_path"] 
+ 
+  config.vm.provision "ansible" do |ansible|
+    ansible.compatibility_mode = "2.0"
+    ansible.playbook = var["ansible_playbook_path"]
+  end
+end
